@@ -15,7 +15,7 @@ void app_main(void)
     while (1)
     {
         printf("send\n");
-        dm_send_torque(0x01, 0.5f, pdMS_TO_TICKS(1));
+        dm_transmit_torque(0x01, 0.5f, pdMS_TO_TICKS(1));
 
         dm_feedback_t fb;
 
