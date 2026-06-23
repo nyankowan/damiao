@@ -2,34 +2,32 @@
 #include "freertos/projdefs.h"
 #include <stdio.h>
 
+#define TWAI_TX GPIO_NUM_21
+#define TWAI_RX GPIO_NUM_22 
+
+#define MASTER_ID 0x00
+#define SLAVE_ID 0x01
+
 void app_main(void)
 {
-    twai_init(GPIO_NUM_21,GPIO_NUM_22);
+    twai_init(TWAI_TX,TWAI_RX);
 
     vTaskDelay(pdMS_TO_TICKS(1000));
 
-    dm_enable(0x01, pdMS_TO_TICKS(10));
+    dm_enable(SLAVE_ID, pdMS_TO_TICKS(10));
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
     while (1)
     {
         printf("send\n");
-        dm_send_torque(0x01, 0.5f, pdMS_TO_TICKS(1));
+        dm_transmit_torque(SLAVE_ID, 0.5f, pdMS_TO_TICKS(1));
 
         dm_feedback_t fb;
 
-        if (dm_receive(0x00, &fb, pdMS_TO_TICKS(10)))
+        if (dm_receive(MASTER_ID, &fb, pdMS_TO_TICKS(10)))
         {
-            printf(
-                "pos=%.3f "
-                "vel=%.3f "
-                "torque=%.3f "
-                "state=%u\n",
-                fb.pos,
-                fb.vel,
-                fb.torque,
-                fb.state);
+            dump_dm_feedback(&fb);
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));

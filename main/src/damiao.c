@@ -1,23 +1,8 @@
 #include "damiao.h"
 #include "driver/twai.h"
-#include <string.h>
 
-#define P_MIN   (-12.5f)
-#define P_MAX   ( 12.5f)
 
-#define V_MIN   (-45.0f)
-#define V_MAX   ( 45.0f)
-
-#define KP_MIN  (0.0f)
-#define KP_MAX  (500.0f)
-
-#define KD_MIN  (0.0f)
-#define KD_MAX  (5.0f)
-
-#define T_MIN   (-18.0f)
-#define T_MAX   ( 18.0f)
-
-void dm_enable(uint16_t can_id, TickType_t ticks_to_wait)
+esp_err_t dm_transmit(uint16_t can_id, uint8_t *data ,TickType_t ticks_to_wait)
 {
     twai_message_t msg = {
         .identifier = can_id,
@@ -25,43 +10,44 @@ void dm_enable(uint16_t can_id, TickType_t ticks_to_wait)
         .extd = 0,
     };
 
+    for(int i = 0; i < 8; i++){
+        msg.data[i] = data[i];
+    }
+
+    return twai_transmit(&msg, ticks_to_wait);
+}
+
+esp_err_t dm_transmit_mit(uint16_t can_id, float pos, float vel, float kp, float kd, float torque, TickType_t ticks_to_wait)
+{
+    uint8_t data[8];
+    pack_cmd(data, pos, vel, kp, kd, torque);
+
+    return dm_transmit(can_id, data, ticks_to_wait);
+}
+
+esp_err_t dm_enable(uint16_t can_id, TickType_t ticks_to_wait)
+{
     uint8_t enable[8] = DM_ENABLE;
-
-    memcpy(msg.data, enable, 8);
-
-    twai_transmit(&msg, ticks_to_wait);
+    return dm_transmit(can_id, enable ,ticks_to_wait);
 }
 
-void dm_disable(uint16_t can_id, TickType_t ticks_to_wait)
+esp_err_t dm_disable(uint16_t can_id, TickType_t ticks_to_wait)
 {
-    twai_message_t msg = {
-        .identifier = can_id,
-        .data_length_code = 8,
-    };
-
     uint8_t disable[8] = DM_DISABLE;
-
-    memcpy(msg.data, disable, 8);
-
-    twai_transmit(&msg, ticks_to_wait);
+    return dm_transmit(can_id, disable ,ticks_to_wait);
 }
 
-void dm_send_torque(uint16_t can_id, float torque, TickType_t ticks_to_wait)
+esp_err_t dm_transmit_torque(uint16_t can_id, float torque, TickType_t ticks_to_wait)
 {
-    twai_message_t msg = {
-        .identifier = can_id,
-        .data_length_code = 8,
-        .extd = 0,
-    };
-
-    pack_cmd(msg.data,
+    uint8_t data[8];
+    pack_cmd(data,
              0.0f,   // pos
              0.0f,   // vel
              0.0f,   // kp
              0.0f,   // kd
              torque);
 
-    twai_transmit(&msg, ticks_to_wait);
+    return dm_transmit(can_id, data ,ticks_to_wait);
 }
 
 esp_err_t dm_receive(uint16_t can_id, dm_feedback_t *fb, TickType_t ticks_to_wait)
@@ -131,4 +117,56 @@ float uint_to_float(uint32_t x, float x_min, float x_max, int bits)
     float offset = x_min;
 
     return ((float)x) * span / ((float)((1 << bits) - 1)) + offset;
+}
+
+const char *dm_state_to_string(dm_state_t state)
+{
+    switch(state)
+    {
+        case DM_STATE_DISABLE:
+            return "DISABLE";
+
+        case DM_STATE_ENABLE:
+            return "ENABLE";
+
+        case DM_STATE_OVERVOLTAGE:
+            return "OVERVOLTAGE";
+
+        case DM_STATE_UNDERVOLTAGE:
+            return "UNDERVOLTAGE";
+
+        case DM_STATE_OVERCURRENT:
+            return "OVERCURRENT";
+
+        case DM_STATE_MOS_OVER_TEMP:
+            return "MOS_OVER_TEMP";
+
+        case DM_STATE_MOTOR_OVER_TEMP:
+            return "MOTOR_OVER_TEMP";
+
+        case DM_STATE_CAN_TIMEOUT:
+            return "CAN_TIMEOUT";
+
+        case DM_STATE_OVERLOAD:
+            return "OVERLOAD";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+void dump_dm_feedback(dm_feedback_t *fb){
+    printf(
+            "pos=%.3f "
+            "vel=%.3f "
+            "torque=%.3f "
+            "state=%u"
+            "mos_temp=%3d"
+            "motor_temp=%3d\n",
+            fb->pos,
+            fb->vel,
+            fb->torque,
+            fb->state,
+            fb->mos_temp,
+            fb->motor_temp);
 }
